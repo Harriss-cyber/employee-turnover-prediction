@@ -409,3 +409,139 @@ if submitted:
         st.warning("This employee is predicted as HIGH attrition risk.")
     else:
         st.success("This employee is predicted as LOW attrition risk.")
+# -----------------------------
+# Q5: Monitoring Metrics
+# -----------------------------
+st.header("Q5: Dashboard Monitoring")
+
+st.subheader("Monitoring Metrics")
+
+# Data quality monitoring
+missing_values = int(df.isnull().sum().sum())
+duplicate_rows = int(df.duplicated().sum())
+invalid_age_count = int(((df["Age"] < 18) | (df["Age"] > 65)).sum())
+
+# Business monitoring
+high_risk_percentage = float((model.predict_proba(X)[:, 1] >= threshold).mean() * 100)
+overall_attrition_rate = float((df["Attrition"] == "Yes").mean() * 100)
+
+monitor_col1, monitor_col2, monitor_col3, monitor_col4 = st.columns(4)
+
+monitor_col1.metric("Missing Values", missing_values)
+monitor_col2.metric("Duplicate Rows", duplicate_rows)
+monitor_col3.metric("Invalid Age Records", invalid_age_count)
+monitor_col4.metric("High Attrition Risk %", f"{high_risk_percentage:.2f}%")
+
+monitor_col5, monitor_col6, monitor_col7, monitor_col8 = st.columns(4)
+
+monitor_col5.metric("Model Accuracy", f"{accuracy:.2%}")
+monitor_col6.metric("Model Recall", f"{recall:.2%}")
+monitor_col7.metric("Model F1-score", f"{f1:.2%}")
+monitor_col8.metric("Actual Attrition Rate", f"{overall_attrition_rate:.2f}%")
+
+st.write(
+    "The monitoring metrics track data quality, model performance, and business risk. "
+    "Missing values, duplicate rows, and invalid age records monitor data reliability. "
+    "Accuracy, recall, and F1-score monitor model performance. "
+    "The high attrition risk percentage helps HR understand the proportion of employees "
+    "predicted as high risk."
+)
+
+
+# -----------------------------
+# Q5: Data Drift Analysis using PSI
+# -----------------------------
+st.subheader("Data Drift Analysis")
+
+def calculate_psi(expected, actual, buckets=10):
+    expected = np.array(expected)
+    actual = np.array(actual)
+
+    breakpoints = np.percentile(expected, np.linspace(0, 100, buckets + 1))
+    breakpoints = np.unique(breakpoints)
+
+    if len(breakpoints) < 2:
+        return 0.0
+
+    expected_counts = np.histogram(expected, bins=breakpoints)[0]
+    actual_counts = np.histogram(actual, bins=breakpoints)[0]
+
+    expected_percents = expected_counts / len(expected)
+    actual_percents = actual_counts / len(actual)
+
+    expected_percents = np.where(expected_percents == 0, 0.0001, expected_percents)
+    actual_percents = np.where(actual_percents == 0, 0.0001, actual_percents)
+
+    psi_values = (actual_percents - expected_percents) * np.log(actual_percents / expected_percents)
+
+    return float(np.sum(psi_values))
+
+
+drift_features = ["Age", "MonthlyIncome", "DistanceFromHome", "YearsAtCompany"]
+
+drift_results = []
+
+for feature in drift_features:
+    psi_value = calculate_psi(X_train[feature], X_test[feature])
+
+    if psi_value < 0.10:
+        drift_status = "No significant drift"
+    elif psi_value < 0.25:
+        drift_status = "Moderate drift"
+    else:
+        drift_status = "Significant drift"
+
+    drift_results.append({
+        "Feature": feature,
+        "PSI Value": round(psi_value, 4),
+        "Drift Status": drift_status
+    })
+
+drift_df = pd.DataFrame(drift_results)
+
+st.dataframe(drift_df)
+
+st.write(
+    "Population Stability Index was used to compare selected feature distributions "
+    "between training and testing data. PSI values below 0.10 indicate no significant drift, "
+    "values between 0.10 and 0.25 indicate moderate drift, and values above 0.25 indicate "
+    "significant drift."
+)
+
+if (drift_df["PSI Value"] >= 0.25).any():
+    st.warning(
+        "Significant drift was detected in at least one feature. "
+        "The model may need retraining in the next sprint."
+    )
+elif (drift_df["PSI Value"] >= 0.10).any():
+    st.info(
+        "Moderate drift was detected. The feature should be monitored in future iterations."
+    )
+else:
+    st.success(
+        "No significant drift was detected. The current model appears stable for the monitored features."
+    )
+
+
+# -----------------------------
+# Q5: Sprint 4 Backlog Display
+# -----------------------------
+st.subheader("Sprint 4 Backlog")
+
+sprint4_backlog = pd.DataFrame({
+    "Priority": ["High", "High", "Medium", "Medium"],
+    "Backlog Item": [
+        "Improve imbalance handling using SMOTE or class-weighted modelling",
+        "Add high-risk employee ranking table with downloadable output",
+        "Add automated alert when model recall drops below target",
+        "Add department-level drift monitoring"
+    ],
+    "Expected Benefit": [
+        "Improves detection of employees likely to leave",
+        "Helps HR plan early retention actions",
+        "Allows the team to respond quickly to model performance degradation",
+        "Helps identify changes in employee patterns across departments"
+    ]
+})
+
+st.dataframe(sprint4_backlog)
